@@ -46,7 +46,7 @@ input[type=file]{display:none}
 
 <div class="card">
   <div class="row">
-    <div><label for="nm">Имя файла</label><input id="nm" type="text" value="Лекция"></div>
+    <div><label for="nm">Имя файла</label><input id="nm" type="text" placeholder="file"></div>
     <div><label for="mb">Макс. размер, МБ</label><input id="mb" type="number" value="10" min="0.5" step="0.5" inputmode="decimal"></div>
   </div>
   <div style="height:12px"></div>
@@ -173,7 +173,7 @@ async function make() {
 
 async function deliver(pdf) {
   const st = $("st");
-  const name = ($("nm").value.trim() || "Фото") + ".pdf";
+  const name = ($("nm").value.trim() || "file") + ".pdf";
   const mbs = (pdf.size / 1048576).toFixed(1) + " МБ";
 
   // запомним готовый PDF — кнопка «Скачать» сможет отдать его повторно

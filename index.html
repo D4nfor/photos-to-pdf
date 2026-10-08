@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Фото в PDF</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#14171c;--mu:#6b7280;--ac:#2d7ff9;--bd:#e3e6ea;--dg:#d93636;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--card:#1a1d23;--tx:#eceff4;--mu:#98a1b0;--bd:#2a2f38}}
+:root[data-theme="dark"]{--bg:#0f1115;--card:#1a1d23;--tx:#eceff4;--mu:#98a1b0;--bd:#2a2f38}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+button,.btn{font:inherit;border:0;border-radius:10px;padding:12px 16px;background:var(--ac);color:#fff;font-weight:600;width:100%;display:block;text-align:center}
+button.sec{background:transparent;color:var(--ac);border:1px solid var(--bd);width:auto;padding:6px 10px;font-weight:500}
+button:disabled{opacity:.5}
+input[type=text],input[type=number]{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:9px;width:100%}
+label{display:block;color:var(--mu);font-size:13px;margin:8px 0 4px}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.item{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--bd)}
+.item:first-child{border-top:0}
+.item img{width:48px;height:60px;object-fit:cover;border-radius:6px;background:var(--bd)}
+.item .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .n small{display:block;color:var(--mu)}
+.ctl{display:flex;gap:4px}
+.x{color:var(--dg)}
+#st{color:var(--mu);font-size:14px;margin-top:10px;min-height:20px;white-space:pre-line}
+.empty{color:var(--mu);text-align:center;padding:10px}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Фото в PDF</h1>
+
+<div class="card">
+  <label class="btn" for="f" style="margin:0">+ Добавить фото</label>
+  <input id="f" type="file" accept="image/*" multiple>
+  <div id="list" style="margin-top:8px"></div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div><label for="nm">Имя файла</label><input id="nm" type="text" value="Лекция"></div>
+    <div><label for="mb">Макс. размер, МБ</label><input id="mb" type="number" value="10" min="0.5" step="0.5" inputmode="decimal"></div>
+  </div>
+  <div style="height:12px"></div>
+  <button id="go" disabled>Создать PDF</button>
+  <div id="st"></div>
+</div>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const files = [];
+const WIDTHS = [1800, 1600, 1400, 1200, 1000, 800];
+const QUALS = [0.85, 0.75, 0.65, 0.55, 0.45, 0.35];
+
+function render() {
+  const l = $("list");
+  l.textContent = "";
+  if (!files.length) {
+    const e = document.createElement("div");
+    e.className = "empty"; e.textContent = "Фото пока не выбраны";
+    l.appendChild(e);
+  }
+  files.forEach((it, i) => {
+    const d = document.createElement("div"); d.className = "item";
+    const im = document.createElement("img"); im.src = it.url;
+    const n = document.createElement("div"); n.className = "n";
+    n.textContent = (i + 1) + ". " + it.file.name;
+    const s = document.createElement("small");
+    s.textContent = (it.file.size / 1048576).toFixed(1) + " МБ";
+    n.appendChild(s);
+    const c = document.createElement("div"); c.className = "ctl";
+    const mk = (t, fn, cls) => {
+      const b = document.createElement("button");
+      b.className = "sec " + (cls || ""); b.textContent = t; b.onclick = fn; return b;
+    };
+    c.append(
+      mk("↑", () => mv(i, -1)), mk("↓", () => mv(i, 1)),
+      mk("✕", () => { URL.revokeObjectURL(it.url); files.splice(i, 1); render(); }, "x")
+    );
+    d.append(im, n, c); l.appendChild(d);
+  });
+  $("go").disabled = !files.length;
+}
+function mv(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= files.length) return;
+  [files[i], files[j]] = [files[j], files[i]]; render();
+}
+$("f").onchange = e => {
+  for (const file of e.target.files) files.push({ file, url: URL.createObjectURL(file) });
+  e.target.value = ""; render();
+};
+
+async function toJpeg(file, width, q) {
+  const bmp = await createImageBitmap(file); // учитывает ориентацию EXIF
+  const w = Math.min(width, bmp.width), h = Math.round(bmp.height * w / bmp.width);
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const cx = cv.getContext("2d");
+  cx.fillStyle = "#fff"; cx.fillRect(0, 0, w, h);
+  cx.drawImage(bmp, 0, 0, w, h);
+  if (bmp.close) bmp.close();
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", q));
+  return { w, h, bytes: new Uint8Array(await blob.arrayBuffer()) };
+}
+
+// Ручная сборка PDF: каждая страница = одна JPEG-картинка (DCTDecode)
+function buildPdf(imgs) {
+  const enc = new TextEncoder(), parts = [], offs = [];
+  let len = 0;
+  const push = p => { const b = typeof p === "string" ? enc.encode(p) : p; parts.push(b); len += b.length; };
+  const obj = (n, head, stream) => {
+    offs[n] = len;
+    push(n + " 0 obj\n" + head);
+    if (stream) { push("\nstream\n"); push(stream); push("\nendstream"); }
+    push("\nendobj\n");
+  };
+  push("%PDF-1.4\n");
+  const N = imgs.length, kids = [];
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  imgs.forEach((im, i) => {
+    const io = 3 + i * 3, co = io + 1, po = io + 2;
+    const pw = 595, ph = +(pw * im.h / im.w).toFixed(2);
+    kids.push(po + " 0 R");
+    obj(io, `<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>`, im.bytes);
+    const cs = enc.encode(`q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`);
+    obj(co, `<< /Length ${cs.length} >>`, cs);
+    obj(po, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${io} 0 R >> >> /Contents ${co} 0 R >>`);
+  });
+  obj(2, `<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${N} >>`);
+  const total = 3 + N * 3, xref = len;
+  push(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for (let n = 1; n < total; n++) push(String(offs[n]).padStart(10, "0") + " 00000 n \n");
+  push(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(parts, { type: "application/pdf" });
+}
+
+async function make() {
+  const limit = (parseFloat($("mb").value.replace(",", ".")) || 10) * 1048576;
+  const st = $("st"), btn = $("go");
+  btn.disabled = true;
+  try {
+    for (const w of WIDTHS) {
+      for (const q of QUALS) {
+        st.textContent = `Подбираю размер… ширина ${w}px, качество ${Math.round(q * 100)}%`;
+        const imgs = [];
+        for (const it of files) imgs.push(await toJpeg(it.file, w, q));
+        const pdf = buildPdf(imgs);
+        if (pdf.size <= limit) { await deliver(pdf); return; }
+      }
+    }
+    st.textContent = "Не удалось уложиться в лимит. Уберите часть фото или увеличьте лимит.";
+  } catch (e) {
+    st.textContent = "Ошибка: " + (e && e.message || e);
+  } finally { btn.disabled = !files.length; }
+}
+
+async function deliver(pdf) {
+  const st = $("st");
+  const name = ($("nm").value.trim() || "Фото") + ".pdf";
+  const mbs = (pdf.size / 1048576).toFixed(1) + " МБ";
+  st.textContent = "Готово: " + mbs;
+  // 1) сохранение через платформу, 2) меню «Поделиться» iOS, 3) открыть в новой вкладке
+  try {
+    const dl = window.claude && await claude.use("downloads");
+    if (dl) { await dl.save({ filename: name, data: pdf }); $("st").textContent = "Готово: " + mbs + ". Файл сохранён."; return; }
+  } catch (e) { if (e && e.code === "declined") { $("st").textContent = "Сохранение отменено (" + mbs + ")"; return; } }
+  const file = new File([pdf], name, { type: "application/pdf" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      $("st").textContent = "Готово: " + mbs; return;
+    }
+  } catch (e) { if (e && e.name === "AbortError") return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(pdf); a.download = name; a.target = "_blank";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+$("go").onclick = make;
+render();
+</script>
+</body>
+</html>
